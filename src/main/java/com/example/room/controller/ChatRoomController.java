@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -47,17 +48,22 @@ public class ChatRoomController {
 
     @GetMapping("/counts")
     public List<Map<String, Object>> roomCounts() {
-        return chatRoomService.findAllRoom().stream()
-                .map(room -> {
-                    String val = stringRedisTemplate.opsForValue().get("sessions:count:" + room.getRoomId());
-                    int participants = parseCount(val);
-                    return Map.<String, Object>of(
-                            "roomId", room.getRoomId(),
-                            "name", room.getName(),
-                            "participants", participants
-                    );
-                })
+        List<ChatRoom> rooms = chatRoomService.findAllRoom();
+        List<String> keys = rooms.stream()
+                .map(room -> "sessions:count:" + room.getRoomId())
                 .toList();
+        List<String> values = keys.isEmpty() ? List.of() : stringRedisTemplate.opsForValue().multiGet(keys);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (int i = 0; i < rooms.size(); i++) {
+            ChatRoom room = rooms.get(i);
+            String val = (values != null && i < values.size()) ? values.get(i) : null;
+            result.add(Map.of(
+                    "roomId", room.getRoomId(),
+                    "name", room.getName(),
+                    "participants", parseCount(val)
+            ));
+        }
+        return result;
     }
 
     @PostMapping
@@ -65,7 +71,10 @@ public class ChatRoomController {
         if (isBlank(name)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "room name is required");
         }
-        return ResponseEntity.ok(chatRoomService.createChatRoom(name.trim()));
+        ChatRoom created = chatRoomService.createChatRoom(name.trim());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .header("Location", "/rooms/" + created.getRoomId())
+                .body(created);
     }
 
     @DeleteMapping("/{roomId}")
