@@ -202,6 +202,35 @@ public class ChatRoomController {
         }
     }
 
+    @PostMapping("/rtmp/on-publish")
+    public ChatRoom rtmpOnPublish(@RequestParam(required = false, defaultValue = "") String callbackSecret,
+                                  @RequestParam(required = false, defaultValue = "") String name) {
+        verifyRtmpCallbackSecret(callbackSecret);
+        if (isBlank(name)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "stream name is required");
+        }
+        try {
+            return chatRoomService.startLiveRoom(name.trim());
+        } catch (NoSuchElementException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
+        }
+    }
+
+    @PostMapping("/rtmp/on-publish-done")
+    public ResponseEntity<Void> rtmpOnPublishDone(@RequestParam(required = false, defaultValue = "") String callbackSecret,
+                                                  @RequestParam(required = false, defaultValue = "") String name) {
+        verifyRtmpCallbackSecret(callbackSecret);
+        if (!isBlank(name)) {
+            try {
+                chatRoomService.endLiveRoom(name.trim());
+            } catch (NoSuchElementException | IllegalStateException ignored) {
+            }
+        }
+        return ResponseEntity.ok().build();
+    }
+
     @DeleteMapping("/{roomId}")
     public ResponseEntity<Void> deleteRoom(@PathVariable String roomId) {
         if (isBlank(roomId)) {
