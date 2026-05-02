@@ -5,7 +5,7 @@ import com.example.room.dto.RoomJoinTokenResponse;
 import com.example.room.dto.RoomCreateRequest;
 import com.example.room.model.ChatRoom;
 import com.example.room.service.ChatRoomService;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,13 +24,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
-@RequiredArgsConstructor
 @RestController
 @RequestMapping("/rooms")
 public class ChatRoomController {
 
     private final ChatRoomService chatRoomService;
     private final StringRedisTemplate stringRedisTemplate;
+    private final String rtmpCallbackSecret;
+
+    public ChatRoomController(ChatRoomService chatRoomService,
+                               StringRedisTemplate stringRedisTemplate,
+                               @Value("${room.rtmp-callback-secret:rtmp-dev-secret}") String rtmpCallbackSecret) {
+        this.chatRoomService = chatRoomService;
+        this.stringRedisTemplate = stringRedisTemplate;
+        this.rtmpCallbackSecret = rtmpCallbackSecret;
+    }
 
     @GetMapping("/categories")
     public List<Map<String, String>> getCategories() {
@@ -165,7 +173,9 @@ public class ChatRoomController {
     }
 
     @PostMapping("/{roomId}/live")
-    public ChatRoom startLive(@PathVariable String roomId) {
+    public ChatRoom startLive(@PathVariable String roomId,
+                              @RequestParam(required = false, defaultValue = "") String callbackSecret) {
+        verifyRtmpCallbackSecret(callbackSecret);
         if (isBlank(roomId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "roomId is required");
         }
@@ -179,7 +189,9 @@ public class ChatRoomController {
     }
 
     @PostMapping("/{roomId}/end")
-    public ChatRoom endLive(@PathVariable String roomId) {
+    public ChatRoom endLive(@PathVariable String roomId,
+                            @RequestParam(required = false, defaultValue = "") String callbackSecret) {
+        verifyRtmpCallbackSecret(callbackSecret);
         if (isBlank(roomId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "roomId is required");
         }
@@ -211,6 +223,12 @@ public class ChatRoomController {
             return Integer.parseInt(value);
         } catch (NumberFormatException ignored) {
             return 0;
+        }
+    }
+
+    private void verifyRtmpCallbackSecret(String provided) {
+        if (!rtmpCallbackSecret.equals(provided)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid callback secret");
         }
     }
 
