@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.RedisClusterConfiguration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -20,9 +21,24 @@ public class RedisConfig {
     @Value("${spring.redis.cluster.nodes}")
     private List<String> redisNodes;
 
+    @Value("${spring.redis.mode:cluster}")
+    private String redisMode;
+
+    @Value("${spring.redis.host:localhost}")
+    private String redisHost;
+
+    @Value("${spring.redis.port:6379}")
+    private int redisPort;
+
     @Bean
     @Primary
     public LettuceConnectionFactory redisConnectionFactory() {
+        if ("standalone".equalsIgnoreCase(redisMode)) {
+            RedisStandaloneConfiguration standaloneConfiguration =
+                    new RedisStandaloneConfiguration(redisHost, redisPort);
+            return new LettuceConnectionFactory(standaloneConfiguration);
+        }
+
         RedisClusterConfiguration clusterConfiguration = new RedisClusterConfiguration(redisNodes);
         clusterConfiguration.setMaxRedirects(3);
         return new LettuceConnectionFactory(clusterConfiguration);
