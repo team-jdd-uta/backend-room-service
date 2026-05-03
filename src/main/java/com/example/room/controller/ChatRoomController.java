@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -32,11 +33,13 @@ public class ChatRoomController {
     private final StringRedisTemplate stringRedisTemplate;
     private final String rtmpCallbackSecret;
     private final List<String> categories;
+    private final boolean gatewayAuthRequired;
 
     public ChatRoomController(ChatRoomService chatRoomService,
                                StringRedisTemplate stringRedisTemplate,
                                @Value("${room.rtmp-callback-secret:rtmp-dev-secret}") String rtmpCallbackSecret,
-                               @Value("${room.categories:게임,토크,음악,스포츠,요리,예술,크리에이티브,학습}") List<String> categories) {
+                               @Value("${room.categories:게임,토크,음악,스포츠,요리,예술,크리에이티브,학습}") List<String> categories,
+                               @Value("${gateway.auth.required:false}") boolean gatewayAuthRequired) {
         this.chatRoomService = chatRoomService;
         this.stringRedisTemplate = stringRedisTemplate;
         this.rtmpCallbackSecret = rtmpCallbackSecret;
@@ -45,6 +48,7 @@ public class ChatRoomController {
                 .filter(category -> !category.isBlank())
                 .distinct()
                 .toList();
+        this.gatewayAuthRequired = gatewayAuthRequired;
     }
 
     @GetMapping("/categories")
@@ -95,13 +99,20 @@ public class ChatRoomController {
     @PostMapping
     public ResponseEntity<RoomProvisioningResponse> createRoom(@RequestParam(required = false) String name,
                                                                @RequestParam(required = false) String broadcasterId,
+                                                               @RequestHeader(value = "X-User-Id", required = false) String authenticatedUserId,
                                                                @RequestBody(required = false) RoomCreateRequest request) {
         String resolvedName = request != null && request.name() != null && !request.name().isBlank()
                 ? request.name().trim()
                 : name;
-        String resolvedBroadcasterId = request != null ? request.resolvedBroadcasterId() : null;
+        String resolvedBroadcasterId = authenticatedUserId;
+        if (isBlank(resolvedBroadcasterId)) {
+            resolvedBroadcasterId = request != null ? request.resolvedBroadcasterId() : null;
+        }
         if (resolvedBroadcasterId == null || resolvedBroadcasterId.isBlank()) {
             resolvedBroadcasterId = broadcasterId;
+        }
+        if (gatewayAuthRequired && isBlank(resolvedBroadcasterId)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "gateway authentication is required");
         }
         if (isBlank(resolvedName)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "room name is required");
@@ -132,18 +143,20 @@ public class ChatRoomController {
     @PostMapping("/{roomId}/join")
     public ChatRoom joinRoom(@PathVariable String roomId,
                              @RequestParam String userId,
+                             @RequestHeader(value = "X-User-Id", required = false) String authenticatedUserId,
                              @RequestParam String joinToken) {
         if (isBlank(roomId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "roomId is required");
         }
-        if (isBlank(userId)) {
+        String resolvedUserId = resolveActorUserId(userId, authenticatedUserId);
+        if (isBlank(resolvedUserId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId is required");
         }
         if (isBlank(joinToken)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "joinToken is required");
         }
         try {
-            return chatRoomService.joinRoom(roomId.trim(), userId.trim(), joinToken.trim());
+            return chatRoomService.joinRoom(roomId.trim(), resolvedUserId.trim(), joinToken.trim());
         } catch (NoSuchElementException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
         } catch (IllegalArgumentException e) {
@@ -155,16 +168,18 @@ public class ChatRoomController {
 
     @PostMapping("/{roomId}/join-token")
     public RoomJoinTokenResponse issueJoinToken(@PathVariable String roomId,
-                                                @RequestParam String userId) {
+                                                @RequestParam String userId,
+                                                @RequestHeader(value = "X-User-Id", required = false) String authenticatedUserId) {
         if (isBlank(roomId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "roomId is required");
         }
-        if (isBlank(userId)) {
+        String resolvedUserId = resolveActorUserId(userId, authenticatedUserId);
+        if (isBlank(resolvedUserId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId is required");
         }
 
         try {
-            return chatRoomService.issueJoinToken(roomId.trim(), userId.trim());
+            return chatRoomService.issueJoinToken(roomId.trim(), resolvedUserId.trim());
         } catch (NoSuchElementException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
         } catch (IllegalStateException e) {
@@ -259,6 +274,19 @@ public class ChatRoomController {
         if (!rtmpCallbackSecret.equals(provided)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid callback secret");
         }
+    }
+
+    private String resolveActorUserId(String requestedUserId, String authenticatedUserId) {
+        if (!isBlank(authenticatedUserId)) {
+            if (!isBlank(requestedUserId) && !requestedUserId.equals(authenticatedUserId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "authenticated user does not match requested user");
+            }
+            return authenticatedUserId;
+        }
+        if (gatewayAuthRequired) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "gateway authentication is required");
+        }
+        return requestedUserId;
     }
 
     private boolean isBlank(String value) {
