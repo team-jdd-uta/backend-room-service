@@ -31,27 +31,27 @@ public class ChatRoomController {
     private final ChatRoomService chatRoomService;
     private final StringRedisTemplate stringRedisTemplate;
     private final String rtmpCallbackSecret;
+    private final List<String> categories;
 
     public ChatRoomController(ChatRoomService chatRoomService,
                                StringRedisTemplate stringRedisTemplate,
-                               @Value("${room.rtmp-callback-secret:rtmp-dev-secret}") String rtmpCallbackSecret) {
+                               @Value("${room.rtmp-callback-secret:rtmp-dev-secret}") String rtmpCallbackSecret,
+                               @Value("${room.categories:게임,토크,음악,스포츠,요리,예술,크리에이티브,학습}") List<String> categories) {
         this.chatRoomService = chatRoomService;
         this.stringRedisTemplate = stringRedisTemplate;
         this.rtmpCallbackSecret = rtmpCallbackSecret;
+        this.categories = categories.stream()
+                .map(String::trim)
+                .filter(category -> !category.isBlank())
+                .distinct()
+                .toList();
     }
 
     @GetMapping("/categories")
     public List<Map<String, String>> getCategories() {
-        return List.of(
-                Map.of("categoryName", "게임"),
-                Map.of("categoryName", "토크"),
-                Map.of("categoryName", "음악"),
-                Map.of("categoryName", "스포츠"),
-                Map.of("categoryName", "요리"),
-                Map.of("categoryName", "예술"),
-                Map.of("categoryName", "크리에이티브"),
-                Map.of("categoryName", "학습")
-        );
+        return categories.stream()
+                .map(category -> Map.of("categoryName", category))
+                .toList();
     }
 
     @GetMapping
