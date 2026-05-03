@@ -247,6 +247,23 @@ public class ChatRoomService {
     }
 
     @Transactional
+    public ChatRoom updateRoomName(String roomId, String broadcasterId, String name) {
+        ChatRoom room = requireRoom(roomId);
+        String normalizedBroadcasterId = requireNonBlank(broadcasterId, "broadcasterId");
+        if (room.getBroadcasterId() == null || !room.getBroadcasterId().trim().equals(normalizedBroadcasterId)) {
+            throw new IllegalStateException("only the broadcaster can update this room: " + roomId);
+        }
+
+        String normalizedName = requireNonBlank(name, "name");
+        room.setName(normalizedName);
+        room.setUpdatedAt(now());
+
+        persistRoom(room, "ROOM_RENAMED");
+        syncRedisRoom(room);
+        return room;
+    }
+
+    @Transactional
     public void deleteChatRoom(String roomId) {
         ChatRoom existing = requireRoom(roomId);
         Map<String, Object> payload = new LinkedHashMap<>();

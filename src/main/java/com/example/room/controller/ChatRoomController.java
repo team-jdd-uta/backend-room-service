@@ -3,6 +3,7 @@ package com.example.room.controller;
 import com.example.room.dto.RoomProvisioningResponse;
 import com.example.room.dto.RoomJoinTokenResponse;
 import com.example.room.dto.RoomCreateRequest;
+import com.example.room.dto.RoomUpdateRequest;
 import com.example.room.model.ChatRoom;
 import com.example.room.service.ChatRoomService;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -74,6 +76,35 @@ public class ChatRoomController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "chat room not found: " + roomId);
         }
         return chatRoom;
+    }
+
+    @PutMapping("/{roomId}")
+    public ChatRoom updateRoom(@PathVariable String roomId,
+                               @RequestHeader(value = "X-User-Id", required = false) String authenticatedUserId,
+                               @RequestBody(required = false) RoomUpdateRequest request) {
+        if (isBlank(roomId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "roomId is required");
+        }
+
+        String resolvedBroadcasterId = resolveActorUserId(null, authenticatedUserId);
+        if (isBlank(resolvedBroadcasterId)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "gateway authentication is required");
+        }
+
+        String resolvedName = request != null ? request.name() : null;
+        if (isBlank(resolvedName)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name is required");
+        }
+
+        try {
+            return chatRoomService.updateRoomName(roomId.trim(), resolvedBroadcasterId.trim(), resolvedName.trim());
+        } catch (NoSuchElementException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage());
+        }
     }
 
     @GetMapping("/counts")
