@@ -2,6 +2,7 @@ package com.example.room.dto;
 
 public record RoomCreateRequest(
         String name,
+        String category,
         String broadcasterId,
         String userId
 ) {
@@ -11,6 +12,13 @@ public record RoomCreateRequest(
         }
         if (userId != null && !userId.isBlank()) {
             return userId.trim();
+        }
+        return null;
+    }
+
+    public String resolvedCategory() {
+        if (category != null && !category.isBlank()) {
+            return category.trim();
         }
         return null;
     }

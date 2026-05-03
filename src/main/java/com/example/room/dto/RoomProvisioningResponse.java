@@ -7,6 +7,7 @@ import lombok.Builder;
 public record RoomProvisioningResponse(
         String roomId,
         String name,
+        String category,
         String broadcasterId,
         RoomStatus status,
         String streamKey,

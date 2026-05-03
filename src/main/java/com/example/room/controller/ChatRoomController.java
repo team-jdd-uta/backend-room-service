@@ -91,13 +91,20 @@ public class ChatRoomController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "gateway authentication is required");
         }
 
-        String resolvedName = request != null ? request.name() : null;
+        String resolvedName = request != null ? request.resolvedName() : null;
         if (isBlank(resolvedName)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name is required");
         }
+        String resolvedCategory = request != null ? request.resolvedCategory() : null;
+        if (isBlank(resolvedCategory)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "category is required");
+        }
+        if (!isSupportedCategory(resolvedCategory.trim())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported category: " + resolvedCategory.trim());
+        }
 
         try {
-            return chatRoomService.updateRoomName(roomId.trim(), resolvedBroadcasterId.trim(), resolvedName.trim());
+            return chatRoomService.updateRoomMetadata(roomId.trim(), resolvedBroadcasterId.trim(), resolvedName.trim(), resolvedCategory.trim());
         } catch (NoSuchElementException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
         } catch (IllegalArgumentException e) {
@@ -148,9 +155,16 @@ public class ChatRoomController {
         if (isBlank(resolvedName)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "room name is required");
         }
+        String resolvedCategory = request != null ? request.resolvedCategory() : null;
+        if (isBlank(resolvedCategory)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "category is required");
+        }
+        if (!isSupportedCategory(resolvedCategory.trim())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported category: " + resolvedCategory.trim());
+        }
         ChatRoom created;
         try {
-            created = chatRoomService.createChatRoom(resolvedName.trim(), resolvedBroadcasterId);
+            created = chatRoomService.createChatRoom(resolvedName.trim(), resolvedCategory.trim(), resolvedBroadcasterId);
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
         }
@@ -159,6 +173,7 @@ public class ChatRoomController {
                 .body(RoomProvisioningResponse.builder()
                         .roomId(created.getRoomId())
                         .name(created.getName())
+                        .category(created.getCategory())
                         .broadcasterId(created.getBroadcasterId())
                         .status(created.getStatus())
                         .streamKey(created.getStreamKey())
@@ -322,5 +337,12 @@ public class ChatRoomController {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private boolean isSupportedCategory(String category) {
+        if (isBlank(category)) {
+            return false;
+        }
+        return categories.stream().anyMatch(allowed -> allowed.equals(category.trim()));
     }
 }

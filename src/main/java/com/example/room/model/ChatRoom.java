@@ -17,6 +17,7 @@ import java.util.UUID;
 public class ChatRoom {
     private String roomId;
     private String name;
+    private String category;
     private String broadcasterId;
     private RoomStatus status;
 
@@ -31,10 +32,11 @@ public class ChatRoom {
     private Long startedAt;
     private Long endedAt;
 
-    public static ChatRoom create(String name) {
+    public static ChatRoom create(String name, String category) {
         ChatRoom chatRoom = new ChatRoom();
         chatRoom.roomId = UUID.randomUUID().toString();
         chatRoom.name = name;
+        chatRoom.category = category;
         chatRoom.status = RoomStatus.DRAFT;
         return chatRoom;
     }
