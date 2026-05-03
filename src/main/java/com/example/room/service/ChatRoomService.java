@@ -139,7 +139,9 @@ public class ChatRoomService {
 
     public ChatRoom joinRoom(String roomId, String userId, String joinToken) {
         ChatRoom room = requireRoom(roomId);
-        if (room.getStatus() != RoomStatus.READY && room.getStatus() != RoomStatus.LIVE) {
+        if (room.getStatus() != RoomStatus.READY
+                && room.getStatus() != RoomStatus.LIVE
+                && room.getStatus() != RoomStatus.STOPPED) {
             throw new IllegalStateException("room is not open for joining: " + roomId);
         }
         if (!roomSecurityService.matchesJoinToken(roomId, userId, joinToken)) {
@@ -151,7 +153,9 @@ public class ChatRoomService {
     @Transactional
     public RoomJoinTokenResponse issueJoinToken(String roomId, String userId) {
         ChatRoom room = requireRoom(roomId);
-        if (room.getStatus() != RoomStatus.READY && room.getStatus() != RoomStatus.LIVE) {
+        if (room.getStatus() != RoomStatus.READY
+                && room.getStatus() != RoomStatus.LIVE
+                && room.getStatus() != RoomStatus.STOPPED) {
             throw new IllegalStateException("room is not open for joining: " + roomId);
         }
 
@@ -197,6 +201,26 @@ public class ChatRoomService {
         if (broadcasterId != null && !broadcasterId.isBlank()) {
             stringRedisTemplate.opsForValue().set(liveBroadcasterKey(broadcasterId.trim()), room.getRoomId());
         }
+        return room;
+    }
+
+    @Transactional
+    public ChatRoom stopLiveRoom(String roomId) {
+        ChatRoom room = requireRoom(roomId);
+        if (room.getStatus() == RoomStatus.ENDED) {
+            return room;
+        }
+        if (room.getStatus() != RoomStatus.LIVE) {
+            return room;
+        }
+
+        long now = now();
+        room.setStatus(RoomStatus.STOPPED);
+        room.setUpdatedAt(now);
+
+        persistRoom(room, "ROOM_LIVE_STOPPED");
+        syncRedisRoom(room);
+
         return room;
     }
 
@@ -262,7 +286,7 @@ public class ChatRoomService {
     }
 
     private void ensureBroadcasterHasNoActiveRoom(String broadcasterId) {
-        if (roomRepository.findFirstByBroadcasterIdAndStatusIn(broadcasterId, List.of(RoomStatus.READY, RoomStatus.LIVE)).isPresent()) {
+        if (roomRepository.findFirstByBroadcasterIdAndStatusIn(broadcasterId, List.of(RoomStatus.READY, RoomStatus.LIVE, RoomStatus.STOPPED)).isPresent()) {
             throw new IllegalStateException("broadcaster already has an active room: " + broadcasterId);
         }
 
@@ -280,7 +304,7 @@ public class ChatRoomService {
 
         roomRepository.findFirstByBroadcasterIdAndStatusInAndRoomIdNot(
                 broadcasterId,
-                List.of(RoomStatus.READY, RoomStatus.LIVE),
+                List.of(RoomStatus.READY, RoomStatus.LIVE, RoomStatus.STOPPED),
                 roomId
         ).ifPresent(room -> {
             throw new IllegalStateException("broadcaster already has an active room: " + broadcasterId);

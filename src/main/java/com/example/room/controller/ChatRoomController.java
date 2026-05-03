@@ -239,7 +239,7 @@ public class ChatRoomController {
         verifyRtmpCallbackSecret(callbackSecret);
         if (!isBlank(name)) {
             try {
-                chatRoomService.endLiveRoom(name.trim());
+                chatRoomService.stopLiveRoom(name.trim());
             } catch (NoSuchElementException | IllegalStateException ignored) {
             }
         }

@@ -4,5 +4,6 @@ public enum RoomStatus {
     DRAFT,
     READY,
     LIVE,
+    STOPPED,
     ENDED
 }
