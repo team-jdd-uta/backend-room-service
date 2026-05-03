@@ -34,6 +34,9 @@ public class RoomEntity {
     @Column(name = "name", nullable = false, length = 255)
     private String name;
 
+    @Column(name = "category", length = 100)
+    private String category;
+
     @Column(name = "broadcaster_id", length = 255)
     private String broadcasterId;
 

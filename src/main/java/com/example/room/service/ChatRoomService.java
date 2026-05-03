@@ -105,13 +105,13 @@ public class ChatRoomService {
     }
 
     @Transactional
-    public ChatRoom createChatRoom(String name) {
-        return createChatRoom(name, null);
+    public ChatRoom createChatRoom(String name, String category) {
+        return createChatRoom(name, category, null);
     }
 
     @Transactional
-    public ChatRoom createChatRoom(String name, String broadcasterId) {
-        ChatRoom chatRoom = ChatRoom.create(name);
+    public ChatRoom createChatRoom(String name, String category, String broadcasterId) {
+        ChatRoom chatRoom = ChatRoom.create(name, category);
         long now = now();
         chatRoom.setCreatedAt(now);
         chatRoom.setUpdatedAt(now);
@@ -247,7 +247,7 @@ public class ChatRoomService {
     }
 
     @Transactional
-    public ChatRoom updateRoomName(String roomId, String broadcasterId, String name) {
+    public ChatRoom updateRoomMetadata(String roomId, String broadcasterId, String name, String category) {
         ChatRoom room = requireRoom(roomId);
         String normalizedBroadcasterId = requireNonBlank(broadcasterId, "broadcasterId");
         if (room.getBroadcasterId() == null || !room.getBroadcasterId().trim().equals(normalizedBroadcasterId)) {
@@ -255,10 +255,12 @@ public class ChatRoomService {
         }
 
         String normalizedName = requireNonBlank(name, "name");
+        String normalizedCategory = requireNonBlank(category, "category");
         room.setName(normalizedName);
+        room.setCategory(normalizedCategory);
         room.setUpdatedAt(now());
 
-        persistRoom(room, "ROOM_RENAMED");
+        persistRoom(room, "ROOM_UPDATED");
         syncRedisRoom(room);
         return room;
     }
@@ -355,6 +357,7 @@ public class ChatRoomService {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("roomId", room.getRoomId());
         payload.put("name", room.getName());
+        payload.put("category", room.getCategory());
         payload.put("broadcasterId", room.getBroadcasterId());
         payload.put("status", room.getStatus());
         payload.put("createdAt", room.getCreatedAt());
