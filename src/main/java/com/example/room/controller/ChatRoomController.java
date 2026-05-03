@@ -6,6 +6,7 @@ import com.example.room.dto.RoomCreateRequest;
 import com.example.room.dto.RoomUpdateRequest;
 import com.example.room.model.ChatRoom;
 import com.example.room.service.ChatRoomService;
+import com.example.room.service.LoginServiceClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
@@ -33,17 +34,20 @@ public class ChatRoomController {
 
     private final ChatRoomService chatRoomService;
     private final StringRedisTemplate stringRedisTemplate;
+    private final LoginServiceClient loginServiceClient;
     private final String rtmpCallbackSecret;
     private final List<String> categories;
     private final boolean gatewayAuthRequired;
 
     public ChatRoomController(ChatRoomService chatRoomService,
                                StringRedisTemplate stringRedisTemplate,
+                               LoginServiceClient loginServiceClient,
                                @Value("${room.rtmp-callback-secret:rtmp-dev-secret}") String rtmpCallbackSecret,
                                @Value("${room.categories:게임,토크,음악,스포츠,요리,예술,크리에이티브,학습}") List<String> categories,
                                @Value("${gateway.auth.required:false}") boolean gatewayAuthRequired) {
         this.chatRoomService = chatRoomService;
         this.stringRedisTemplate = stringRedisTemplate;
+        this.loginServiceClient = loginServiceClient;
         this.rtmpCallbackSecret = rtmpCallbackSecret;
         this.categories = categories.stream()
                 .map(String::trim)
@@ -81,12 +85,13 @@ public class ChatRoomController {
     @PutMapping("/{roomId}")
     public ChatRoom updateRoom(@PathVariable String roomId,
                                @RequestHeader(value = "X-User-Id", required = false) String authenticatedUserId,
+                               @RequestHeader(value = "X-Cognito-Sub", required = false) String authenticatedCognitoSub,
                                @RequestBody(required = false) RoomUpdateRequest request) {
         if (isBlank(roomId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "roomId is required");
         }
 
-        String resolvedBroadcasterId = resolveActorUserId(null, authenticatedUserId);
+        String resolvedBroadcasterId = resolveActorUserId(null, authenticatedUserId, authenticatedCognitoSub);
         if (isBlank(resolvedBroadcasterId)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "gateway authentication is required");
         }
@@ -138,11 +143,12 @@ public class ChatRoomController {
     public ResponseEntity<RoomProvisioningResponse> createRoom(@RequestParam(required = false) String name,
                                                                @RequestParam(required = false) String broadcasterId,
                                                                @RequestHeader(value = "X-User-Id", required = false) String authenticatedUserId,
+                                                               @RequestHeader(value = "X-Cognito-Sub", required = false) String authenticatedCognitoSub,
                                                                @RequestBody(required = false) RoomCreateRequest request) {
         String resolvedName = request != null && request.name() != null && !request.name().isBlank()
                 ? request.name().trim()
                 : name;
-        String resolvedBroadcasterId = authenticatedUserId;
+        String resolvedBroadcasterId = resolveActorUserId(null, authenticatedUserId, authenticatedCognitoSub);
         if (isBlank(resolvedBroadcasterId)) {
             resolvedBroadcasterId = request != null ? request.resolvedBroadcasterId() : null;
         }
@@ -190,11 +196,12 @@ public class ChatRoomController {
     public ChatRoom joinRoom(@PathVariable String roomId,
                              @RequestParam String userId,
                              @RequestHeader(value = "X-User-Id", required = false) String authenticatedUserId,
+                             @RequestHeader(value = "X-Cognito-Sub", required = false) String authenticatedCognitoSub,
                              @RequestParam String joinToken) {
         if (isBlank(roomId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "roomId is required");
         }
-        String resolvedUserId = resolveActorUserId(userId, authenticatedUserId);
+        String resolvedUserId = resolveActorUserId(userId, authenticatedUserId, authenticatedCognitoSub);
         if (isBlank(resolvedUserId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId is required");
         }
@@ -215,11 +222,12 @@ public class ChatRoomController {
     @PostMapping("/{roomId}/join-token")
     public RoomJoinTokenResponse issueJoinToken(@PathVariable String roomId,
                                                 @RequestParam String userId,
-                                                @RequestHeader(value = "X-User-Id", required = false) String authenticatedUserId) {
+                                                @RequestHeader(value = "X-User-Id", required = false) String authenticatedUserId,
+                                                @RequestHeader(value = "X-Cognito-Sub", required = false) String authenticatedCognitoSub) {
         if (isBlank(roomId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "roomId is required");
         }
-        String resolvedUserId = resolveActorUserId(userId, authenticatedUserId);
+        String resolvedUserId = resolveActorUserId(userId, authenticatedUserId, authenticatedCognitoSub);
         if (isBlank(resolvedUserId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId is required");
         }
@@ -322,7 +330,14 @@ public class ChatRoomController {
         }
     }
 
-    private String resolveActorUserId(String requestedUserId, String authenticatedUserId) {
+    private String resolveActorUserId(String requestedUserId, String authenticatedUserId, String authenticatedCognitoSub) {
+        String resolvedFromCognitoSub = loginServiceClient.findUserIdByCognitoSub(authenticatedCognitoSub).orElse(null);
+        if (!isBlank(resolvedFromCognitoSub)) {
+            if (!isBlank(requestedUserId) && !requestedUserId.equals(resolvedFromCognitoSub)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "authenticated user does not match requested user");
+            }
+            return resolvedFromCognitoSub;
+        }
         if (!isBlank(authenticatedUserId)) {
             if (!isBlank(requestedUserId) && !requestedUserId.equals(authenticatedUserId)) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "authenticated user does not match requested user");
