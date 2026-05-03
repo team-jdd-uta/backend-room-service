@@ -58,6 +58,15 @@ curl -X POST "http://localhost:8082/rooms" \
 
 `join-token` API는 시청자가 입장 직전에 자신의 `userId` 기준 토큰을 받아갈 때 사용합니다.
 
+### 토큰 책임
+
+- `streamKey`: RTMP ingest와 HLS 경로 식별자입니다. 현재 구현에서는 `roomId`와 동일하게 발급합니다.
+- 생성 응답의 `joinToken`: 방 생성 직후 호환성을 위해 포함되는 값입니다. 시청자 입장용 source of truth로 쓰지 않습니다.
+- `/rooms/{roomId}/join-token`: 시청자가 입장 직전에 자신의 `userId`로 발급받는 stateless HMAC 토큰입니다.
+- `/rooms/{roomId}/join`: `roomId`, `userId`, `joinToken` 조합을 검증합니다.
+
+시청자 입장 플로우는 생성 응답의 저장된 토큰 대신 `/join-token`에서 받은 사용자별 토큰을 사용합니다.
+
 조회 예:
 
 ```bash
