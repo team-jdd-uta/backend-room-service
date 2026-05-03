@@ -47,7 +47,7 @@ spec:
 
   parameters {
     string(name: 'IMAGE_TAG', defaultValue: '', description: '비워두면 git short sha를 이미지 태그로 사용합니다.')
-    booleanParam(name: 'RUN_TESTS', defaultValue: false, description: '테스트 코드가 준비되면 true로 전환하세요.')
+    booleanParam(name: 'RUN_TESTS', defaultValue: true, description: '이미지 push 전에 테스트를 실행합니다.')
     booleanParam(name: 'PUSH_IMAGE', defaultValue: true, description: 'main 브랜치에서 ECR 이미지 push 여부')
     booleanParam(name: 'DEPLOY', defaultValue: false, description: 'main 브랜치에서만 배포 연동을 실행합니다.')
     string(name: 'APPROVAL_TIMEOUT_MINUTES', defaultValue: '30', description: 'main 브랜치 webhook 빌드가 승인 입력을 기다릴 시간(분)')
